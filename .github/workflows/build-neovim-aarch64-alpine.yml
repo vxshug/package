@@ -88,7 +88,6 @@ jobs:
               fi
 
               mkdir -p /work/stage/usr/local/bin
-              cp /opt/nvim/bin/nvim /work/stage/usr/local/bin/nvim
 
               cat > /work/stage/opt/nvim/BUILD_INFO <<EOF
               neovim_ref=$NVIM_REF
