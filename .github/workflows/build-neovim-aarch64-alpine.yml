@@ -11,7 +11,7 @@ on:
       alpine_version:
         description: "Alpine version used for build"
         required: true
-        default: "3.20"
+        default: "3.22"
         type: string
       strip_binary:
         description: "Strip nvim binary"
