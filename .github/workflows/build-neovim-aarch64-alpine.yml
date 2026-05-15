@@ -1,0 +1,119 @@
+name: Build Neovim for aarch64 Alpine
+
+on:
+  workflow_dispatch:
+    inputs:
+      neovim_ref:
+        description: "Neovim tag / branch / SHA, e.g. v0.12.2"
+        required: true
+        default: "v0.12.2"
+        type: string
+      alpine_version:
+        description: "Alpine version used for build"
+        required: true
+        default: "3.20"
+        type: string
+      strip_binary:
+        description: "Strip nvim binary"
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  build:
+    name: Build static aarch64 Alpine Neovim
+    runs-on: ubuntu-24.04
+
+    env:
+      NVIM_REF: ${{ inputs.neovim_ref }}
+      ALPINE_VERSION: ${{ inputs.alpine_version }}
+      STRIP_BINARY: ${{ inputs.strip_binary }}
+
+    steps:
+      - name: Checkout workflow repo
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for arm64
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+
+      - name: Build Neovim inside aarch64 Alpine
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p dist
+
+          docker run --rm \
+            --platform linux/arm64 \
+            -e NVIM_REF \
+            -e ALPINE_VERSION \
+            -e STRIP_BINARY \
+            -v "$PWD:/work" \
+            -w /work \
+            "alpine:${ALPINE_VERSION}" \
+            sh -euxc '
+              apk add --no-cache \
+                build-base \
+                cmake \
+                coreutils \
+                curl \
+                file \
+                gettext-tiny-dev \
+                git \
+                linux-headers \
+                ninja \
+                tar
+
+              rm -rf /tmp/neovim /work/stage
+              git clone --filter=blob:none https://github.com/neovim/neovim.git /tmp/neovim
+
+              cd /tmp/neovim
+              git fetch --tags --force
+              git checkout "$NVIM_REF"
+
+              COMMIT="$(git rev-parse --short=12 HEAD)"
+              SAFE_REF="$(printf "%s" "$NVIM_REF" | sed "s#[^A-Za-z0-9._-]#-#g")"
+
+              make \
+                CMAKE_BUILD_TYPE=Release \
+                CMAKE_EXTRA_FLAGS="-DSTATIC_BUILD=1 -DCMAKE_INSTALL_PREFIX=/opt/nvim"
+
+              rm -rf /work/stage
+              DESTDIR=/work/stage cmake --install build
+
+              if [ "$STRIP_BINARY" = "true" ]; then
+                strip /work/stage/opt/nvim/bin/nvim || true
+              fi
+
+              mkdir -p /work/stage/usr/local/bin
+              ln -sf /opt/nvim/bin/nvim /work/stage/usr/local/bin/nvim
+
+              cat > /work/stage/opt/nvim/BUILD_INFO <<EOF
+              neovim_ref=$NVIM_REF
+              neovim_commit=$COMMIT
+              alpine_version=$ALPINE_VERSION
+              target=aarch64-alpine-linux-musl
+              static_build=1
+              EOF
+
+              file /work/stage/opt/nvim/bin/nvim
+              /work/stage/opt/nvim/bin/nvim --version
+
+              OUT="/work/dist/nvim-${SAFE_REF}-${COMMIT}-aarch64-alpine-musl-static.tar.gz"
+              tar -C /work/stage -czf "$OUT" opt usr
+              sha256sum "$OUT" > "$OUT.sha256"
+
+              ls -lh /work/dist
+            '
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: neovim-aarch64-alpine-${{ inputs.neovim_ref }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 30
