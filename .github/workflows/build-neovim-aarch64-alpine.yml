@@ -89,14 +89,8 @@ jobs:
 
               mkdir -p /work/stage/usr/local/bin
 
-              cat > /work/stage/opt/nvim/BUILD_INFO <<EOF
-              neovim_ref=$NVIM_REF
-              neovim_commit=$COMMIT
-              alpine_version=$ALPINE_VERSION
-              target=aarch64-alpine-linux-musl
-              static_build=1
-              EOF
-
+              echo -e "neovim_ref=$NVIM_REF\nneovim_commit=$COMMIT\nalpine_version=$ALPINE_VERSION\ntarget=aarch64-alpine-linux-musl\nstatic_build=1" > /work/stage/opt/nvim/BUILD_INFO
+              
               file /work/stage/opt/nvim/bin/nvim
               /work/stage/opt/nvim/bin/nvim --version
 
